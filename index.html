@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Showroom AI - Immersive Viewer</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <!-- PAGE DE CONNEXION -->
+    <div class="container" id="login-section">
+        <h1>🛍️ <span class="title-icon">🔐</span> <span class="title-text">Connexion</span></h1>
+        <p class="login-message">Veuillez entrer vos identifiants s’il vous plaît.</p>
+
+        <div class="input-section">
+            <input type="email" id="email" placeholder="Adresse e-mail" required />
+            <input type="password" id="password" placeholder="Mot de passe" required />
+            <button id="login-btn">Se connecter</button>
+            <a href="#" class="forgot-password">Mot de passe oublié ?</a>
+        </div>
+
+        <div id="login-error" style="color: red; margin-top: 10px;"></div>
+    </div>
+
+    <!-- PAGE IMMERSIVE PRINCIPALE -->
+    <div id="main-section" class="skybox-style" style="display: none;">
+        <!-- Zone immersive -->
+        <div class="viewer-container" id="viewer">
+            <!-- Vidéo masquée par défaut, affichée uniquement après génération -->
+            <video id="bg-video" autoplay muted loop playsinline style="display: none;">
+                <source src="images/video.mp4" type="video/mp4" />
+                Votre navigateur ne prend pas en charge la lecture vidéo.
+            </video>
+        </div>
+
+        <!-- Barre de prompt -->
+        <div class="prompt-bar" id="prompt-bar">
+            <input type="text" id="prompt" placeholder="Décris ton showroom..." />
+            <button id="generate">GÉNÉRER</button>
+        </div>
+
+        <!-- Message de succès -->
+        <div id="success-message" class="success-overlay" style="display: none;">
+            <div class="success-box">
+                <h2>✅ Génération réussie ! Voici votre boutique.</h2>
+            </div>
+        </div>
+
+        <!-- Bouton retour en bas à gauche -->
+        <button id="back-btn" style="display: none;">← Retour</button>
+
+        <!-- Footer -->
+        <footer>
+            © 2025 Showroom AI | Propulsé par Meshy, GoreAI & Shopify
+        </footer>
+    </div>
+
+    <script src="scripy.js"></script>
+</body>
+
+</html>
