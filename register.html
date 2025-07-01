@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inscription - Showroom AI</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <div class="container">
+        <h1>🛍️ <span class="title-text">Créer un compte</span></h1>
+        <p class="login-message">Remplissez les informations ci-dessous pour vous inscrire.</p>
+
+        <div class="input-section">
+            <input type="text" id="username" placeholder="Nom d'utilisateur" required />
+            <input type="email" id="email" placeholder="Adresse e-mail" required />
+            <input type="password" id="password" placeholder="Mot de passe" required />
+            <input type="password" id="confirm-password" placeholder="Confirmer le mot de passe" required />
+            <button id="register-btn">S'inscrire</button>
+            <a href="index.html" class="forgot-password">Déjà inscrit ? Connexion</a>
+        </div>
+
+        <div id="register-error" style="color: red; margin-top: 10px;"></div>
+        <div id="register-success" style="color: green; margin-top: 10px;"></div>
+    </div>
+
+    <script src="register.js"></script>
+</body>
+
+</html>
