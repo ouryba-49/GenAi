@@ -1,22 +1,42 @@
-// Connexion simulée
-document.getElementById("login-btn").addEventListener("click", () => {
+// Connexion réelle via fetch
+document.getElementById("login-btn").addEventListener("click", async () => {
     const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value.trim();
     const errorDiv = document.getElementById("login-error");
 
-    if (email === "admin@shop.ai" && password === "123456") {
-        document.getElementById("login-section").style.display = "none";
-        document.getElementById("main-section").style.display = "block";
+    errorDiv.innerText = "";
 
-        // Cacher la vidéo à l’arrivée
-        const video = document.getElementById("bg-video");
-        if (video) video.style.display = "none";
-    } else {
-        errorDiv.innerText = "Identifiants incorrects. Réessaye.";
+    if (!email || !password) {
+        errorDiv.innerText = "Veuillez remplir tous les champs.";
+        return;
+    }
+
+    try {
+        const res = await fetch("/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            document.getElementById("login-section").style.display = "none";
+            document.getElementById("main-section").style.display = "block";
+
+            // Cacher la vidéo à l’arrivée
+            const video = document.getElementById("bg-video");
+            if (video) video.style.display = "none";
+        } else {
+            errorDiv.innerText = data.message || "Identifiants incorrects.";
+        }
+    } catch (err) {
+        errorDiv.innerText = "Erreur de connexion au serveur.";
     }
 });
 
-// Génération du showroom
+
+// Génération du showroom (vidéo immersive)
 document.getElementById('generate').addEventListener('click', () => {
     const prompt = document.getElementById('prompt').value.trim();
     const viewer = document.getElementById('viewer');
