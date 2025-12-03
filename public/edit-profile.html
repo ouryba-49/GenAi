@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Modifier mon profil · Showroom AI</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body class="auth-page profile-view edit-view">
+    <div class="auth-glow glow-one"></div>
+    <div class="auth-glow glow-two"></div>
+
+    <main class="auth-layout profile-layout">
+        <section class="auth-highlight profile-highlight">
+            <span class="auth-badge">Signature immersive</span>
+            <h1>Actualisez vos informations en toute sécurité</h1>
+            <p>
+                Vos coordonnées alimentent les alertes IA, vos partages d’expériences et la
+                personnalisation de votre showroom virtuel. Mettez-les à jour pour rester aligné
+                avec vos équipes et vos clients.
+            </p>
+
+            <ul class="auth-highlights">
+                <li><strong>Photo et identité :</strong> renforcez la confiance auprès de vos visiteurs.</li>
+                <li><strong>Coordonnées:</strong> facilitez les suivis commerciaux.</li>
+                <li><strong>Notifications:</strong> recevez des alertes ciblées sur vos scènes.</li>
+            </ul>
+        </section>
+
+        <section class="auth-panel profile-panel edit-panel">
+            <div class="auth-logo">
+                <div class="logo-icon">
+                    <img src="images/Logo.png" alt="Showroom AI logo">
+                </div>
+                <div>
+                    <p class="logo-title">Showroom AI</p>
+                    <p class="logo-subtitle">Edition du profil</p>
+                </div>
+            </div>
+
+            <div id="error" class="auth-alert error" role="alert" style="display:none;"></div>
+            <div id="success" class="auth-alert success" role="status" style="display:none;">
+                Profil mis à jour avec succès !
+            </div>
+
+            <form id="edit-form" class="edit-form" novalidate>
+                <div class="photo-upload">
+                    <div class="photo-preview">
+                        <img id="preview-img" src="" alt="Aperçu photo" style="display:none;" />
+                        <span id="preview-placeholder">👤</span>
+                    </div>
+                    <div class="photo-input-wrapper">
+                        <label for="profile-photo">Photo de profil</label>
+                        <input type="file" id="profile-photo" accept="image/*" />
+                        <p>Formats acceptés : JPG ou PNG (max 5 MB).</p>
+                        <small id="photo-error" class="photo-error" style="display:none;"></small>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="username">Nom d'utilisateur</label>
+                    <input type="text" id="username" placeholder="Votre nom d'utilisateur" disabled />
+                    <small>Le nom d'utilisateur ne peut pas être modifié.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" placeholder="vous@email.com" disabled />
+                    <small>L'adresse e-mail est verrouillée pour votre sécurité.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="phone">Téléphone</label>
+                    <input type="tel" id="phone" placeholder="Votre numéro de téléphone" maxlength="20" />
+                </div>
+
+                <div class="form-group">
+                    <label for="address">Adresse</label>
+                    <textarea id="address" placeholder="Rue, ville, pays..."></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="primary-btn btn-save">Enregistrer</button>
+                    <a href="profile.html" class="ghost-btn">Annuler</a>
+                </div>
+            </form>
+        </section>
+    </main>
+
+    <script src="js/edit-profile.js"></script>
+</body>
+
+</html>

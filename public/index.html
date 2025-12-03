@@ -1,0 +1,183 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Connexion a Showroom AI</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body class="auth-page login-view">
+    <div class="auth-glow glow-one"></div>
+    <div class="auth-glow glow-two"></div>
+
+    <div id="login-section" class="auth-layout">
+        <section class="auth-highlight">
+            <span class="auth-badge">Espace membre</span>
+            <h1>Reprenez vos explorations immersives</h1>
+            <p>
+                Connectez-vous pour piloter vos scènes IA, partager des
+                expériences avec vos clients et suivre les performances de vos collections.
+            </p>
+
+            <ul class="auth-highlights">
+                <li><strong>Historique:</strong> retrouvez vos prompts et scènes sauvegardées.</li>
+                <li><strong>Multi-support:</strong> optimisé pour vos démos en salle de vente.</li>
+                <li><strong>Sécurité:</strong> authentification renforcée et journaux d'activité.</li>
+            </ul>
+        </section>
+
+        <section class="auth-panel">
+            <div class="auth-logo">
+                <div class="logo-icon">
+                    <img src="images/Logo.png" alt="Showroom AI logo">
+                </div>
+                <div>
+                    <p class="logo-title">Showroom AI</p>
+                    <p class="logo-subtitle">Connexion sécurisée</p>
+                </div>
+            </div>
+
+            <div class="auth-panel-header">
+                <h2>Connexion</h2>
+                <p>Entrez vos identifiants pour accéder à votre cockpit immersif.</p>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="email">Adresse e-mail</label>
+                    <input type="email" id="email" placeholder="vous@entreprise.com" required />
+                </div>
+                <div class="form-field">
+                    <label for="password">Mot de passe</label>
+                    <input type="password" id="password" placeholder="********" required />
+                </div>
+            </div>
+
+            <button id="login-btn" class="primary-btn" type="button">Se connecter</button>
+
+            <p class="auth-switch">
+                Pas encore de compte ? <a href="inscription.html">Créer un compte</a>
+            </p>
+
+            <div id="login-error" class="auth-alert error" role="alert" aria-live="polite"></div>
+        </section>
+    </div>
+
+    <!-- Section principale -->
+    <div id="main-section" style="display: none;">
+        <div class="topbar">
+            <div class="topbar-left">
+                <h2>Showroom AI</h2>
+            </div>
+            <div class="topbar-right">
+                <button id="history-btn" class="topbar-btn">🕘 Historique de site </button>
+                <button id="subscription-btn" class="topbar-btn">💳 Abonnement</button>
+                <a href="profile.html" class="topbar-btn">👤 Mon profil</a>
+                <button id="logout-btn" class="topbar-btn logout">🔌 Deconnexion</button>
+            </div>
+        </div>
+
+        <div class="viewer-container" id="viewer">
+            <video id="bg-video" autoplay muted loop>
+                <source src="images/video.mp4" type="video/mp4" />
+                Votre navigateur ne supporte pas la vidéo.
+            </video>
+
+            <div class="prompt-bar" id="prompt-bar">
+                <input type="text" id="prompt" placeholder="Décrivez votre showroom..." />
+                <button id="generate">GENERER</button>
+            </div>
+
+            <div id="n8n-validation-box" class="n8n-message-box" style="display:none;">
+                <div id="n8n-message-text"></div>
+                <div class="n8n-buttons">
+                    <button id="n8n-yes-btn">Oui</button>
+                    <button id="n8n-no-btn">Non</button>
+                </div>
+            </div>
+
+            <div id="success-message" class="success-overlay" style="display:none;">
+                Showroom générer avec succés !
+            </div>
+
+            <button id="back-btn" style="display:none;">↩️ Retour</button>
+
+            <div id="history-panel" class="history-panel" style="display:none;">
+                <div class="history-card">
+                    <div class="history-header">
+                        <h3>Historique de site</h3>
+                        <button id="close-history" class="close-history" aria-label="Fermer l'historique">↩️</button>
+                    </div>
+                    <div id="history-status" class="history-status">
+                        Commencez par generer un showroom pour voir l'historique.
+                    </div>
+                    <ul id="history-list" class="history-list"></ul>
+                </div>
+            </div>
+        </div>
+
+        <div id="subscription-panel" class="subscription-overlay" style="display:none;">
+            <div class="subscription-card">
+                <button id="subscription-close-btn" class="close-subscription" type="button"
+                    aria-label="Fermer l'abonnement">×</button>
+                <div class="subscription-section">
+                    <div class="subscription-header">
+                        <h3>Abonnement</h3>
+                        <span id="subscription-status-badge" class="subscription-badge status-inactive">Inactif</span>
+                    </div>
+                    <p class="subscription-description" id="subscription-description">
+                        Souscrivez pour débloquer l'intégralité des fonctionnalités Showroom AI.
+                    </p>
+                    <div class="subscription-meta">
+                        <p>
+                            <span class="meta-label">Plan :</span>
+                            <span id="subscription-plan-label">Aucun plan actif</span>
+                        </p>
+                        <p>
+                            <span class="meta-label">Renouvellement :</span>
+                            <span id="subscription-renews-label">--</span>
+                        </p>
+                    </div>
+
+                    <div class="plan-selector">
+                        <button type="button" class="plan-card selected" data-plan="basic_monthly">
+                            <span class="plan-name">Basic</span>
+                            <span class="plan-price">9,90 ? / mois</span>
+                            <span class="plan-note">Pour demarrer</span>
+                        </button>
+                        <button type="button" class="plan-card" data-plan="pro_monthly">
+                            <span class="plan-name">Pro</span>
+                            <span class="plan-price">19,90 ? / mois</span>
+                            <span class="plan-note">Premium</span>
+                        </button>
+                    </div>
+
+                    <button type="button" id="subscription-cta" class="primary-btn subscription-cta-btn">
+                        Souscrire maintenant
+                    </button>
+                    <p class="subscription-note">
+                        Vous serez rediriger vers une page de paiement securise Stripe.
+                    </p>
+                </div>
+                <div id="subscription-feedback" class="auth-alert info" style="display:none;"></div>
+            </div>
+        </div>
+
+        <footer>
+            <span id="year"></span> Showroom AI. Tous droits réservés.
+        </footer>
+    </div>
+
+    <script>
+        document.getElementById("year").textContent = new Date().getFullYear();
+    </script>
+
+    <script src="js/login.js"></script>
+    <script src="js/generate.js"></script>
+    <script src="js/history.js"></script>
+    <script src="js/subscription.js"></script>
+</body>
+
+</html>
