@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mon Profil · Showroom AI</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body class="auth-page profile-view">
+    <div class="auth-glow glow-one"></div>
+    <div class="auth-glow glow-two"></div>
+
+    <main class="auth-layout profile-layout">
+        <section class="auth-highlight profile-highlight">
+            <span class="auth-badge">Identité Showroom</span>
+            <h1>Personnalisez votre cockpit utilisateur</h1>
+            <p>
+                Centralisez vos informations pour fluidifier les échanges avec vos équipes,
+                synchroniser vos scènes IA et recevoir les alertes liées à votre showroom.
+            </p>
+
+            <ul class="auth-highlights">
+                <li><strong>Identité vérifiée :</strong> vos accès restent sécurisés.</li>
+                <li><strong>Coordonnées :</strong> partage contrôlé avec vos collaborateurs.</li>
+                <li><strong>Historique :</strong> suivez vos dates d’inscription et activités.</li>
+            </ul>
+        </section>
+
+        <section class="auth-panel profile-panel">
+            <div class="auth-logo">
+                <div class="logo-icon">
+                    <img src="images/Logo.png" alt="Showroom AI logo">
+                </div>
+                <div>
+                    <p class="logo-title">Showroom AI</p>
+                    <p class="logo-subtitle">Espace profil</p>
+                </div>
+            </div>
+
+            <div id="loading" class="profile-loading" style="display:none;">
+                Chargement du profil...
+            </div>
+
+            <div id="error" class="auth-alert error" role="alert" style="display:none;"></div>
+
+            <div id="profile-content" class="profile-card" style="display:none;">
+                <div class="profile-header">
+                    <div class="profile-picture">
+                        <img id="profile-img" src="" alt="Photo de profil" style="display:none;" />
+                        <span id="profile-placeholder">🙂</span>
+                    </div>
+
+                    <div class="profile-info">
+                        <h2 id="profile-username">--</h2>
+                        <p class="profile-role">Utilisateur Showroom AI</p>
+                        <span id="subscription-pill" class="subscription-pill">Plan : --</span>
+                        <p class="profile-created">
+                            Inscrit le <span id="profile-created">--</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="profile-details">
+                    <div class="profile-field">
+                        <p class="label">Adresse e-mail</p>
+                        <p class="value" id="profile-email">--</p>
+                    </div>
+
+                    <div class="profile-field">
+                        <p class="label">Téléphone</p>
+                        <p class="value" id="profile-phone">Non renseigné</p>
+                    </div>
+
+                    <div class="profile-field">
+                        <p class="label">Adresse</p>
+                        <p class="value" id="profile-address">Non renseignée</p>
+                    </div>
+                </div>
+
+                <div class="profile-actions">
+                    <a href="edit-profile.html" class="primary-btn profile-edit-btn">Modifier le profil</a>
+                    <button type="button" onclick="goBack()" class="ghost-btn">Retour au dashboard</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="js/profile.js"></script>
+</body>
+
+</html>
