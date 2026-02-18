@@ -17,6 +17,7 @@ const axios = require("axios");
 const nodemailer = require("nodemailer");
 const sgMail = require('@sendgrid/mail');
 const Stripe = require("stripe");
+const FormData = require("form-data");
 
 // ---------- Config de base ----------
 const app = express();
@@ -94,7 +95,7 @@ app.use(cookieParser());
 // afin de laisser Stripe recevoir le corps brut nécessaire à la vérification de signature,
 // puis active aussi le parsing des données envoyées par formulaires HTML.
 
-const jsonParser = express.json({ limit: "1mb" });
+const jsonParser = express.json({ limit: "10mb" });
 
 app.use((req, res, next) => {
   if (req.originalUrl && req.originalUrl.startsWith("/webhook/stripe")) {
@@ -267,6 +268,17 @@ function epochToISOString(epochSeconds) {
 function getPlanConfig(planKey) {
   if (!planKey) return null;
   return SUBSCRIPTION_PLANS[planKey] || null;
+}
+
+function decodeBase64Image(dataUrl) {
+  if (!dataUrl) return null;
+  const matches = String(dataUrl).match(/^data:(.*);base64,(.+)$/);
+  const base64Data = matches ? matches[2] : dataUrl;
+  try {
+    return Buffer.from(base64Data, "base64");
+  } catch (err) {
+    return null;
+  }
 }
 
 async function persistStripeSubscription({ userId, planKey, subscription }) {
@@ -460,7 +472,7 @@ app.post("/gpt-generate", gptLimiter, async (req, res) => {
         // Choisis un modèle récent dispo pour ton compte
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Tu es un assistant showroom qui reformule et valide la description utilisateur." },
+          { role: "system", content: "Tu es un assistant showroom qui redemmande a l'utilisateur et valide la description utilisateur." },
           { role: "user", content: String(prompt) }
         ],
         temperature: 0.7,
@@ -491,6 +503,46 @@ app.post("/gpt-generate", gptLimiter, async (req, res) => {
     const apiErr = err?.response?.data || err.message || err;
     console.error("OPENAI ERROR:", apiErr);
     return res.status(502).json({ success: false, message: "Erreur de communication avec le moteur." });
+  }
+});
+
+// ---------- Route OpenAI Image (génération à partir d'un prompt) ----------
+app.post("/image-edit", async (req, res) => {
+  try {
+    const { prompt, userId } = req.body || {};
+
+    if (!prompt) {
+      return res.status(400).json({ success: false, message: "Prompt manquant." });
+    }
+    if (!OPENAI_API_KEY) {
+      return res.status(500).json({ success: false, message: "Clé OpenAI manquante côté serveur." });
+    }
+
+    const response = await axios.post("https://api.openai.com/v1/images/generations", {
+      model: "dall-e-3",
+      prompt: String(prompt),
+      size: "1024x1024",
+      quality: "standard",
+      n: 1,
+    }, {
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      timeout: 120000,
+    });
+
+    const imageUrl = response?.data?.data?.[0]?.url || null;
+    if (!imageUrl) {
+      return res.status(502).json({ success: false, message: "Réponse image vide." });
+    }
+
+    return res.json({ success: true, imageUrl: imageUrl });
+  } catch (err) {
+    return res.status(502).json({
+      success: false,
+      message: "Erreur lors de la génération de l'image.",
+    });
   }
 });
 
@@ -809,6 +861,10 @@ app.use("/api", (_req, res) => {
 });
 
 // ---------- Démarrage ----------
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`✅ Serveur démarré sur http://localhost:${PORT}`);
 });
+
+// Augmenter les timeouts pour les requêtes longues (génération d'images)
+server.setTimeout(120000); // 120 secondes pour les connexions socket
+server.keepAliveTimeout = 65000;

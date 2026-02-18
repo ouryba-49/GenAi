@@ -85,10 +85,35 @@ body {
     background-position: center;
     background-repeat: no-repeat;
     z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .viewer-container:empty {
     background: none;
+}
+
+/* ========= Conteneur d'image generee ========= */
+.generated-image-container {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 5;
+}
+
+.generated-image {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
 /* ✅ Gradient d’amélioration lisibilité (ajouté) */
@@ -144,6 +169,47 @@ body {
 .prompt-bar button:hover {
     background-color: #019875;
     transform: scale(1.03);
+}
+
+.upload-wrapper {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(15, 15, 20, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 10px 14px;
+    backdrop-filter: blur(10px);
+    z-index: 10;
+}
+
+.upload-filename {
+    color: #e2e2e2;
+    font-size: 14px;
+}
+
+.upload-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.upload-preview img {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.ghost-btn.small {
+    min-width: auto;
+    padding: 8px 12px;
+    font-size: 13px;
 }
 
 /* ========= Responsive prompt bar ========= */
@@ -361,6 +427,79 @@ button:hover {
     border: none;
     cursor: pointer;
     font-size: 18px;
+}
+
+/* ========= Boite de validation de reformulation ========= */
+.n8n-message-box {
+    position: fixed;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(500px, 90vw);
+    background: rgba(15, 15, 20, 0.95);
+    border: 2px solid rgba(0, 184, 148, 0.6);
+    border-radius: 12px;
+    padding: 16px;
+    z-index: 100;
+    box-shadow: 0 8px 30px rgba(0, 184, 148, 0.25);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#n8n-message-text {
+    color: #f1f1f1;
+    font-size: 14px;
+    line-height: 1.5;
+    word-wrap: break-word;
+}
+
+#n8n-message-text strong {
+    color: #00b894;
+    display: block;
+    margin-bottom: 8px;
+}
+
+#n8n-message-text em {
+    color: #ccc;
+    font-style: italic;
+}
+
+.n8n-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+#n8n-yes-btn,
+#n8n-no-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: 0.3s ease;
+}
+
+#n8n-yes-btn {
+    background-color: #00b894;
+    color: white;
+}
+
+#n8n-yes-btn:hover {
+    background-color: #019875;
+    transform: scale(1.05);
+}
+
+#n8n-no-btn {
+    background-color: rgba(255, 107, 107, 0.8);
+    color: white;
+}
+
+#n8n-no-btn:hover {
+    background-color: #ff6b6b;
+    transform: scale(1.05);
 }
 
 /* Historique des prompts */
@@ -1164,4 +1303,3 @@ body.auth-page {
     background: rgba(255, 255, 255, 0.08);
     color: #dfe6e9;
 }
-

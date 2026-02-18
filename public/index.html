@@ -85,9 +85,23 @@
                 Votre navigateur ne supporte pas la vidéo.
             </video>
 
-            <div class="prompt-bar" id="prompt-bar">
-                <input type="text" id="prompt" placeholder="Décrivez votre showroom..." />
+            <!-- Conteneur pour l'image générée -->
+            <div id="generated-image-container" class="generated-image-container" style="display:none;">
+                <img id="generated-image" alt="Image generee" class="generated-image" />
+            </div>
+
+                        <div class="prompt-bar" id="prompt-bar">
+                <input type="text" id="prompt" placeholder="D?crivez votre showroom..." />
                 <button id="generate">GENERER</button>
+            </div>
+            <div class="upload-wrapper">
+                <input type="file" id="image-input" accept="image/*" style="display:none;" />
+                <button type="button" id="pick-image" class="ghost-btn">Choisir une image</button>
+                <span id="upload-filename" class="upload-filename">Aucune image</span>
+                <div id="upload-preview" class="upload-preview" style="display:none;">
+                    <img id="upload-preview-img" alt="Aper?u image" />
+                    <button type="button" id="upload-remove-btn" class="ghost-btn small">Retirer</button>
+                </div>
             </div>
 
             <div id="n8n-validation-box" class="n8n-message-box" style="display:none;">
@@ -99,12 +113,12 @@
             </div>
 
             <div id="success-message" class="success-overlay" style="display:none;">
-                Showroom générer avec succés !
+                Showroom généré avec succès !
             </div>
 
-            <button id="back-btn" style="display:none;">↩️ Retour</button>
+            <button id="back-btn" style="display:none;">← Retour</button>
 
-            <div id="history-panel" class="history-panel" style="display:none;">
+<div id="history-panel" class="history-panel" style="display:none;">
                 <div class="history-card">
                     <div class="history-header">
                         <h3>Historique de site</h3>
@@ -144,12 +158,12 @@
                     <div class="plan-selector">
                         <button type="button" class="plan-card selected" data-plan="basic_monthly">
                             <span class="plan-name">Basic</span>
-                            <span class="plan-price">9,90 ? / mois</span>
+                            <span class="plan-price">9,90 € / mois</span>
                             <span class="plan-note">Pour demarrer</span>
                         </button>
                         <button type="button" class="plan-card" data-plan="pro_monthly">
                             <span class="plan-name">Pro</span>
-                            <span class="plan-price">19,90 ? / mois</span>
+                            <span class="plan-price">19,90 € / mois</span>
                             <span class="plan-note">Premium</span>
                         </button>
                     </div>
