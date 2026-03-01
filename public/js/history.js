@@ -1,5 +1,5 @@
 // public/js/history.js
-// Affichage de l'historique des prompts par utilisateur
+// Affichage de l'historique des prompts + image de resultat
 
 const historyBtn = document.getElementById("history-btn");
 const historyPanel = document.getElementById("history-panel");
@@ -21,7 +21,7 @@ const renderHistory = (items = []) => {
     historyList.innerHTML = "";
 
     if (!items.length) {
-        historyStatus.textContent = "Aucune génération enregistrée pour le moment.";
+        historyStatus.textContent = "Aucune generation enregistrée pour le moment.";
         return;
     }
 
@@ -35,18 +35,45 @@ const renderHistory = (items = []) => {
         title.textContent = item.prompt || "Prompt inconnu";
 
         const response = document.createElement("p");
-        response.textContent = item.response || "Réponse indisponible.";
+        response.textContent = item.response || "Reponse indisponible.";
+
+        const imageBlock = document.createElement("div");
+        imageBlock.className = "history-image-block";
+
+        if (item.image_url) {
+            const preview = document.createElement("img");
+            preview.className = "history-image-preview";
+            preview.alt = "Resultat genere";
+            preview.loading = "lazy";
+            preview.src = item.image_url;
+
+            const imageLink = document.createElement("a");
+            imageLink.href = item.image_url;
+            imageLink.target = "_blank";
+            imageLink.rel = "noopener noreferrer";
+            imageLink.className = "history-image-link";
+            imageLink.textContent = "Ouvrir l'image";
+
+            imageBlock.appendChild(preview);
+            imageBlock.appendChild(imageLink);
+        } else {
+            const noImage = document.createElement("p");
+            noImage.className = "history-no-image";
+            noImage.textContent = "Image non disponible pour cette entrée.";
+            imageBlock.appendChild(noImage);
+        }
 
         const date = document.createElement("div");
         date.className = "history-date";
         const formattedDate = new Date(item.created_at || Date.now()).toLocaleString("fr-FR", {
             dateStyle: "medium",
-            timeStyle: "short"
+            timeStyle: "short",
         });
         date.textContent = formattedDate;
 
         li.appendChild(title);
         li.appendChild(response);
+        li.appendChild(imageBlock);
         li.appendChild(date);
         historyList.appendChild(li);
     });
@@ -64,29 +91,13 @@ const loadHistory = async () => {
     if (historyList) historyList.innerHTML = "";
 
     try {
-        const url = `http://localhost:3001/user/prompts?userId=${encodeURIComponent(
-            userId
-        )}&limit=50`;
-
-        console.log("[HISTORY] Fetch =>", url);
-
+        const url = `http://localhost:3001/user/prompts?userId=${encodeURIComponent(userId)}&limit=50`;
         const res = await fetch(url);
-
-        let data = null;
-
-        try {
-            data = await res.json();
-        } catch {
-            data = null;
-        }
+        const data = await res.json().catch(() => null);
 
         if (!res.ok || !data?.success) {
             const statusHint = res.ok ? "" : ` (statut ${res.status})`;
-            const serverMessage = data?.message;
-            throw new Error(
-                serverMessage ||
-                `Impossible de récupérer l'historique${statusHint}. Vérifiez que le serveur a bien été redémarré.`
-            );
+            throw new Error(data?.message || `Impossible de recuperer l'historique${statusHint}.`);
         }
 
         renderHistory(data.history || []);
@@ -100,15 +111,11 @@ historyBtn?.addEventListener("click", loadHistory);
 closeHistoryBtn?.addEventListener("click", hideHistoryPanel);
 
 historyPanel?.addEventListener("click", (event) => {
-    if (event.target === historyPanel) {
-        hideHistoryPanel();
-    }
+    if (event.target === historyPanel) hideHistoryPanel();
 });
 
 document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-        hideHistoryPanel();
-    }
+    if (event.key === "Escape") hideHistoryPanel();
 });
 
 document.addEventListener("prompt-history:updated", () => {

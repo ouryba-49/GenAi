@@ -116,15 +116,15 @@ app.use(express.urlencoded({ extended: true }));
 // ---------- Fichiers statiques (frontend) ----------
 // Tout ce qui est dans mon dossier public sera accessible direment sur le serveur
 const PUBLIC_DIR = path.join(__dirname, "public");
-app.use(express.static(PUBLIC_DIR));
+app.use(express.static(PUBLIC_DIR, { index: false }));
 
 // ---------- Page par défaut ----------
 // Pour atterrir sur la page d’inscription par défaut :
 app.get("/", (req, res) => {
-  const signupPath = path.join(PUBLIC_DIR, "inscription.html");
-  const fallbackIndex = path.join(PUBLIC_DIR, "index.html");
-  res.sendFile(signupPath, (err) => {
-    if (err) res.sendFile(fallbackIndex);
+  const homePath = path.join(PUBLIC_DIR, "home.html");
+  const fallbackSignup = path.join(PUBLIC_DIR, "inscription.html");
+  res.sendFile(homePath, (err) => {
+    if (err) res.sendFile(fallbackSignup);
   });
 });
 
@@ -140,6 +140,7 @@ function ensurePromptHistoryTable() {
           user_id INTEGER NOT NULL,
           prompt TEXT NOT NULL,
           response TEXT,
+          image_url TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users(id)
         )
@@ -152,6 +153,22 @@ function ensurePromptHistoryTable() {
         resolve();
       }
     );
+  });
+}
+
+function ensurePromptHistoryColumns() {
+  return new Promise((resolve, reject) => {
+    db.all("PRAGMA table_info(prompt_history);", (err, rows) => {
+      if (err) return reject(err);
+      const columnNames = (rows || []).map((row) => row.name);
+      if (columnNames.includes("image_url")) {
+        return resolve();
+      }
+      db.run(`ALTER TABLE prompt_history ADD COLUMN image_url TEXT`, (alterErr) => {
+        if (alterErr) return reject(alterErr);
+        resolve();
+      });
+    });
   });
 }
 
@@ -171,7 +188,9 @@ db.serialize(() => {
   `, (err) => {
     if (err) console.error("Erreur création table:", err);
   });
-  ensurePromptHistoryTable().catch(() => { });
+  ensurePromptHistoryTable()
+    .then(() => ensurePromptHistoryColumns())
+    .catch(() => { });
 
   // Migration : ajouter les colonnes si elles n'existent pas (pour les tables existantes)
   setTimeout(() => {
@@ -472,7 +491,7 @@ app.post("/gpt-generate", gptLimiter, async (req, res) => {
         // Choisis un modèle récent dispo pour ton compte
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Tu es un assistant showroom qui redemmande a l'utilisateur et valide la description utilisateur." },
+          { role: "system", content: "Tu es un assistant showroom qui redemmande à l'utilisateur et valide la description utilisateur." },
           { role: "user", content: String(prompt) }
         ],
         temperature: 0.7,
@@ -489,15 +508,18 @@ app.post("/gpt-generate", gptLimiter, async (req, res) => {
       return res.status(502).json({ success: false, message: "Réponse vide du moteur." });
     }
 
-    db.run(
-      `INSERT INTO prompt_history (user_id, prompt, response) VALUES (?, ?, ?)`,
-      [normalizedUserId, String(prompt), message],
-      (err) => {
-        if (err) console.error("PROMPT HISTORY INSERT ERROR:", err);
-      }
-    );
+    const historyId = await new Promise((resolve, reject) => {
+      db.run(
+        `INSERT INTO prompt_history (user_id, prompt, response) VALUES (?, ?, ?)`,
+        [normalizedUserId, String(prompt), message],
+        function (err) {
+          if (err) return reject(err);
+          resolve(this.lastID || null);
+        }
+      );
+    });
 
-    return res.json({ success: true, message });
+    return res.json({ success: true, message, historyId });
   } catch (err) {
     // Log utile côté serveur
     const apiErr = err?.response?.data || err.message || err;
@@ -509,43 +531,95 @@ app.post("/gpt-generate", gptLimiter, async (req, res) => {
 // ---------- Route OpenAI Image (génération à partir d'un prompt) ----------
 app.post("/image-edit", async (req, res) => {
   try {
-    const { prompt, userId } = req.body || {};
+    const { prompt, imageDataUrl, userId, historyId } = req.body || {};
 
     if (!prompt) {
       return res.status(400).json({ success: false, message: "Prompt manquant." });
     }
     if (!OPENAI_API_KEY) {
-      return res.status(500).json({ success: false, message: "Clé OpenAI manquante côté serveur." });
+      return res.status(500).json({ success: false, message: "Cle OpenAI manquante cote serveur." });
     }
 
-    const response = await axios.post("https://api.openai.com/v1/images/generations", {
-      model: "dall-e-3",
-      prompt: String(prompt),
-      size: "1024x1024",
-      quality: "standard",
-      n: 1,
-    }, {
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      timeout: 120000,
-    });
+    const promptText = String(prompt);
+    let response = null;
+    const getImageFromResponse = (apiResponse) => {
+      const item = apiResponse?.data?.data?.[0] || null;
+      if (!item) return null;
+      if (item.url) return item.url;
+      if (item.b64_json) return `data:image/png;base64,${item.b64_json}`;
+      return null;
+    };
 
-    const imageUrl = response?.data?.data?.[0]?.url || null;
+    if (imageDataUrl) {
+      const imageBuffer = decodeBase64Image(imageDataUrl);
+      if (!imageBuffer) {
+        return res.status(400).json({ success: false, message: "Image importée invalide." });
+      }
+
+      const form = new FormData();
+      form.append("model", "gpt-image-1");
+      form.append("prompt", promptText);
+      form.append("size", "1024x1024");
+      form.append("image", imageBuffer, {
+        filename: "reference.png",
+        contentType: "image/png",
+      });
+
+      try {
+        response = await axios.post("https://api.openai.com/v1/images/edits", form, {
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            ...form.getHeaders(),
+          },
+          timeout: 120000,
+        });
+      } catch (editErr) {
+        console.warn("IMAGE EDIT FALLBACK TO GENERATION:", editErr?.response?.data || editErr.message);
+      }
+    }
+
+    if (!response) {
+      response = await axios.post("https://api.openai.com/v1/images/generations", {
+        model: "dall-e-3",
+        prompt: promptText,
+        size: "1024x1024",
+        quality: "standard",
+        n: 1,
+      }, {
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 120000,
+      });
+    }
+
+    const imageUrl = getImageFromResponse(response);
     if (!imageUrl) {
-      return res.status(502).json({ success: false, message: "Réponse image vide." });
+      return res.status(502).json({ success: false, message: "Reponse image vide." });
     }
 
-    return res.json({ success: true, imageUrl: imageUrl });
+    const parsedHistoryId = Number.parseInt(historyId, 10);
+    const parsedUserId = Number.parseInt(userId, 10);
+    if (Number.isFinite(parsedHistoryId)) {
+      db.run(
+        `UPDATE prompt_history SET image_url = ? WHERE id = ? AND (? IS NULL OR user_id = ?)`,
+        [imageUrl, parsedHistoryId, Number.isFinite(parsedUserId) ? parsedUserId : null, Number.isFinite(parsedUserId) ? parsedUserId : null],
+        (err) => {
+          if (err) console.error("PROMPT HISTORY IMAGE UPDATE ERROR:", err);
+        }
+      );
+    }
+
+    return res.json({ success: true, imageUrl });
   } catch (err) {
+    console.error("IMAGE ROUTE ERROR:", err?.response?.data || err.message || err);
     return res.status(502).json({
       success: false,
-      message: "Erreur lors de la génération de l'image.",
+      message: "Erreur lors de la generation de l'image.",
     });
   }
 });
-
 // ---------- Routes Abonnement (Stripe) ----------
 app.post("/subscriptions/checkout", async (req, res) => {
   if (!stripe) {
@@ -682,6 +756,60 @@ app.post("/subscriptions/confirm", async (req, res) => {
   } catch (err) {
     console.error("STRIPE CONFIRM ERROR:", err);
     return res.status(500).json({ success: false, message: "Impossible de confirmer la session." });
+  }
+});
+
+app.post("/subscriptions/cancel", async (req, res) => {
+  if (!stripe) {
+    return res.status(503).json({ success: false, message: "Stripe n'est pas configuré sur le serveur." });
+  }
+  try {
+    const { userId } = req.body || {};
+    const normalizedUserId = normalizeUserId(userId);
+    if (!normalizedUserId) {
+      return res.status(400).json({ success: false, message: "ID utilisateur invalide." });
+    }
+
+    const user = await getUserById(normalizedUserId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Utilisateur introuvable." });
+    }
+
+    const provider = String(user.subscription_provider || "").toLowerCase();
+    const providerId = user.subscription_provider_id;
+    if (provider !== "stripe" || !providerId) {
+      return res.status(400).json({ success: false, message: "Aucun abonnement Stripe actif à résilier." });
+    }
+
+    let canceledSubscription = null;
+    try {
+      canceledSubscription = await stripe.subscriptions.cancel(providerId);
+    } catch (stripeErr) {
+      const stripeError = stripeErr?.raw?.message || stripeErr?.message || "Erreur Stripe.";
+      console.error("STRIPE CANCEL ERROR:", stripeErr);
+      return res.status(502).json({ success: false, message: stripeError });
+    }
+
+    await persistStripeSubscription({
+      userId: normalizedUserId,
+      planKey: user.subscription_plan || null,
+      subscription: canceledSubscription,
+    });
+
+    return res.json({
+      success: true,
+      subscription: {
+        status: canceledSubscription?.status || "canceled",
+        plan: user.subscription_plan || null,
+        renews_at: epochToISOString(canceledSubscription?.current_period_end) || null,
+        canceled_at: epochToISOString(canceledSubscription?.canceled_at) || new Date().toISOString(),
+        provider: "stripe",
+        provider_id: canceledSubscription?.id || providerId,
+      },
+    });
+  } catch (err) {
+    console.error("SUBSCRIPTION CANCEL ERROR:", err);
+    return res.status(500).json({ success: false, message: "Impossible de résilier l'abonnement." });
   }
 });
 
@@ -839,7 +967,7 @@ app.get("/user/prompts", (req, res) => {
     }
 
     db.all(
-      `SELECT id, prompt, response, created_at FROM prompt_history WHERE user_id = ? ORDER BY datetime(created_at) DESC LIMIT ?`,
+      `SELECT id, prompt, response, image_url, created_at FROM prompt_history WHERE user_id = ? ORDER BY datetime(created_at) DESC LIMIT ?`,
       [userId, limit],
       (err, rows) => {
         if (err) {
@@ -868,3 +996,4 @@ const server = app.listen(PORT, () => {
 // Augmenter les timeouts pour les requêtes longues (génération d'images)
 server.setTimeout(120000); // 120 secondes pour les connexions socket
 server.keepAliveTimeout = 65000;
+

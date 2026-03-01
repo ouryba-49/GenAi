@@ -2,6 +2,7 @@
 // Affichage des données de profil (sans gestion d'abonnement)
 
 const userId = localStorage.getItem("userId");
+let currentSubscription = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   if (!userId) {
@@ -28,7 +29,9 @@ async function loadProfile() {
       throw new Error(data.message || "Impossible de charger le profil.");
     }
     const user = data.user;
-    updateSubscriptionPill(user.subscription);
+    currentSubscription = user.subscription || null;
+    updateSubscriptionPill(currentSubscription);
+    updateCancelSubscriptionUI(currentSubscription);
     document.getElementById("profile-username").textContent = user.username || "--";
     document.getElementById("profile-email").textContent = user.email || "--";
     document.getElementById("profile-phone").textContent = user.phone || "Non renseigné";
@@ -83,3 +86,85 @@ function resolveSubscriptionTier(subscription) {
   if (plan.includes("basic")) return "Basic";
   return "Premium";
 }
+
+function canCancelSubscription(subscription) {
+  if (!subscription) return false;
+  const status = String(subscription.status || "inactive").toLowerCase();
+  const provider = String(subscription.provider || "").toLowerCase();
+  return (status === "active" || status === "trialing" || status === "past_due" || status === "pending")
+    && provider === "stripe"
+    && Boolean(subscription.provider_id);
+}
+
+function updateCancelSubscriptionUI(subscription) {
+  const wrap = document.getElementById("cancel-subscription-wrap");
+  const feedback = document.getElementById("cancel-subscription-feedback");
+  if (!wrap) return;
+
+  const show = canCancelSubscription(subscription);
+  wrap.style.display = show ? "block" : "none";
+  if (feedback) {
+    feedback.style.display = "none";
+    feedback.textContent = "";
+    feedback.classList.remove("success", "error");
+  }
+}
+
+async function cancelSubscription() {
+  const button = document.getElementById("cancel-subscription-btn");
+  const feedback = document.getElementById("cancel-subscription-feedback");
+
+  if (!canCancelSubscription(currentSubscription)) {
+    if (feedback) {
+      feedback.textContent = "Aucun abonnement actif a resilier.";
+      feedback.classList.add("error");
+      feedback.style.display = "block";
+    }
+    return;
+  }
+
+  const confirmed = window.confirm("Confirmer la résiliation de votre abonnement ?");
+  if (!confirmed) return;
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Résiliation...";
+  }
+  if (feedback) {
+    feedback.style.display = "none";
+    feedback.textContent = "";
+    feedback.classList.remove("success", "error");
+  }
+
+  try {
+    const res = await fetch("/subscriptions/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "Impossible de resilier l'abonnement.");
+    }
+
+    if (feedback) {
+      feedback.textContent = "Abonnement resilie avec succes.";
+      feedback.classList.add("success");
+      feedback.style.display = "block";
+    }
+    await loadProfile();
+  } catch (err) {
+    if (feedback) {
+      feedback.textContent = err.message || "Erreur lors de la resiliation.";
+      feedback.classList.add("error");
+      feedback.style.display = "block";
+    }
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Resilier mon abonnement";
+    }
+  }
+}
+
+document.getElementById("cancel-subscription-btn")?.addEventListener("click", cancelSubscription);

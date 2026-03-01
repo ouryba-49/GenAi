@@ -87,7 +87,26 @@
 
             <!-- Conteneur pour l'image générée -->
             <div id="generated-image-container" class="generated-image-container" style="display:none;">
-                <img id="generated-image" alt="Image generee" class="generated-image" />
+                <div class="generated-image-stage">
+                    <div class="generated-modal-header">
+                        <h3>Resultat de generation</h3>
+                        <button id="result-close-btn" class="result-close-btn" type="button" aria-label="Fermer">×</button>
+                    </div>
+                    <div class="generated-image-frame">
+                        <img id="generated-image" alt="Image generee" class="generated-image" />
+                    </div>
+                    <p id="generated-prompt-chip" class="generated-prompt-chip" style="display:none;"></p>
+                    <div class="generated-actions">
+                        <a id="download-generated-btn" class="download-generated-btn" href="#" download="showroom-ai-resultat.png">Telecharger l'image</a>
+                    </div>
+                </div>
+            </div>
+
+            <div id="generation-loader" class="generation-loader" style="display:none;">
+                <div class="generation-loader-card">
+                    <div class="generation-spinner" aria-hidden="true"></div>
+                    <p id="generation-loader-text">Generation de votre visuel en cours...</p>
+                </div>
             </div>
 
                         <div class="prompt-bar" id="prompt-bar">

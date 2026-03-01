@@ -11,9 +11,14 @@ const validationNoBtn = document.getElementById("n8n-no-btn");
 const viewer = document.getElementById("viewer");
 const generatedImageContainer = document.getElementById("generated-image-container");
 const generatedImage = document.getElementById("generated-image");
+const generatedPromptChip = document.getElementById("generated-prompt-chip");
+const resultCloseBtn = document.getElementById("result-close-btn");
+const downloadGeneratedBtn = document.getElementById("download-generated-btn");
 const video = document.getElementById("bg-video");
 const successMessage = document.getElementById("success-message");
 const backBtn = document.getElementById("back-btn");
+const generationLoader = document.getElementById("generation-loader");
+const generationLoaderText = document.getElementById("generation-loader-text");
 
 const imageInput = document.getElementById("image-input");
 const pickImageBtn = document.getElementById("pick-image");
@@ -25,14 +30,48 @@ const uploadRemoveBtn = document.getElementById("upload-remove-btn");
 let selectedImageDataUrl = null;
 let selectedImageSize = 0;
 let pendingReformulatedPrompt = null; // Stocker la version reformulee
+let pendingHistoryId = null;
 
 if (validationBox) validationBox.style.display = "none";
+if (generationLoader) generationLoader.style.display = "none";
+
+const showLoader = (label) => {
+  if (generationLoaderText && label) generationLoaderText.textContent = label;
+  if (generationLoader) generationLoader.style.display = "flex";
+};
+
+const hideLoader = () => {
+  if (generationLoader) generationLoader.style.display = "none";
+};
+
+const shortenText = (text, maxLength = 220) => {
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trim()}...`;
+};
+
+const buildDownloadFilename = () => {
+  const now = new Date();
+  const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+  return `showroom-ai-${stamp}.png`;
+};
 
 const resetState = () => {
   if (successMessage) successMessage.style.display = "none";
   if (backBtn) backBtn.style.display = "none";
   if (promptBar) promptBar.style.display = "flex";
   if (generatedImageContainer) generatedImageContainer.style.display = "none";
+  if (generatedImage) generatedImage.removeAttribute("src");
+  if (generatedPromptChip) {
+    generatedPromptChip.textContent = "";
+    generatedPromptChip.style.display = "none";
+  }
+  if (downloadGeneratedBtn) {
+    downloadGeneratedBtn.setAttribute("href", "#");
+    downloadGeneratedBtn.setAttribute("download", "showroom-ai-resultat.png");
+  }
+  pendingHistoryId = null;
+  hideLoader();
   if (video) {
     video.pause();
     video.currentTime = 0;
@@ -44,6 +83,10 @@ const handleFile = (file) => {
   if (!file) return;
   if (!file.type.startsWith("image/")) {
     alert("Merci de selectionner un fichier image.");
+    return;
+  }
+  if ((file.size || 0) > 8 * 1024 * 1024) {
+    alert("Image trop lourde (max 8 Mo).");
     return;
   }
   selectedImageSize = file.size || 0;
@@ -74,7 +117,7 @@ async function reformulatePrompt(prompt, userId) {
       throw new Error(data.message || "Impossible de reformuler le prompt.");
     }
 
-    return data.message; // La version reformulee
+    return data; // { success, message, historyId }
   } catch (err) {
     console.error("Reformulation error:", err);
     throw err;
@@ -95,6 +138,8 @@ async function generateImage(prompt, userId) {
       body: JSON.stringify({
         prompt,
         userId,
+        historyId: pendingHistoryId || null,
+        imageDataUrl: selectedImageDataUrl || null,
       }),
       signal: controller.signal,
     });
@@ -127,7 +172,18 @@ async function generateImage(prompt, userId) {
 // ========== Afficher la boite de validation ==========
 function showReformulationBox(reformulatedText) {
   if (validationBox && validationText) {
-    validationText.innerHTML = `<strong>Prompt reformule :</strong><br><em>"${reformulatedText}"</em><br><br>Etes-vous satisfait de cette formulation ?`;
+    validationText.textContent = "";
+
+    const title = document.createElement("strong");
+    title.textContent = "Prompt reformule :";
+
+    const promptLine = document.createElement("em");
+    promptLine.textContent = `"${reformulatedText}"`;
+
+    const question = document.createElement("span");
+    question.textContent = "Etes-vous satisfait de cette formulation ?";
+
+    validationText.append(title, promptLine, question);
     validationBox.style.display = "flex";
   }
 }
@@ -150,6 +206,48 @@ uploadRemoveBtn?.addEventListener("click", () => {
   if (uploadFilename) uploadFilename.textContent = "Aucune image";
 });
 
+resultCloseBtn?.addEventListener("click", resetState);
+
+downloadGeneratedBtn?.addEventListener("click", async (event) => {
+  const imageUrl = generatedImage?.src || "";
+  if (!imageUrl) {
+    event.preventDefault();
+    return;
+  }
+
+  // Tente un vrai téléchargement local, puis fallback sur ouverture navigateur.
+  if (!imageUrl.startsWith("data:")) {
+    event.preventDefault();
+    try {
+      const res = await fetch(imageUrl, { mode: "cors" });
+      if (!res.ok) throw new Error("download failed");
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = buildDownloadFilename();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch {
+      window.open(imageUrl, "_blank", "noopener,noreferrer");
+    }
+  }
+});
+
+generatedImageContainer?.addEventListener("click", (event) => {
+  if (event.target === generatedImageContainer) {
+    resetState();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && generatedImageContainer?.style.display === "flex") {
+    resetState();
+  }
+});
+
 // ========== Evenement du bouton "OUI" ==========
 validationYesBtn?.addEventListener("click", async () => {
   hideReformulationBox();
@@ -162,6 +260,11 @@ validationYesBtn?.addEventListener("click", async () => {
   const previousText = generateBtn.innerText;
   generateBtn.innerText = "Generation en cours...";
   generateBtn.disabled = true;
+  showLoader(
+    selectedImageDataUrl
+      ? "Generation de votre visuel a partir de votre image..."
+      : "Generation de votre visuel en cours..."
+  );
 
   try {
     const finalUrl = await generateImage(pendingReformulatedPrompt, localStorage.getItem("userId"));
@@ -173,21 +276,35 @@ validationYesBtn?.addEventListener("click", async () => {
         if (generatedImageContainer) generatedImageContainer.style.display = "flex";
         if (video) video.style.display = "none";
         if (promptBar) promptBar.style.display = "none";
+        if (downloadGeneratedBtn) {
+          downloadGeneratedBtn.setAttribute("href", finalUrl);
+          downloadGeneratedBtn.setAttribute("download", buildDownloadFilename());
+        }
+        if (generatedPromptChip) {
+          generatedPromptChip.textContent = `Prompt valide : ${shortenText(pendingReformulatedPrompt)}`;
+          generatedPromptChip.style.display = "block";
+        }
         if (successMessage) successMessage.style.display = "block";
         if (backBtn) backBtn.style.display = "block";
+        hideLoader();
       };
       generatedImage.onerror = () => {
+        hideLoader();
         alert("Erreur : impossible de charger l'image.");
         showReformulationBox(pendingReformulatedPrompt);
       };
     }
     
     pendingReformulatedPrompt = null; // Nettoyer
+    pendingHistoryId = null;
+    document.dispatchEvent(new CustomEvent("prompt-history:updated"));
   } catch (err) {
+    hideLoader();
     alert(err.message || "Erreur lors de la generation.");
     console.error("Generation error:", err);
     showReformulationBox(pendingReformulatedPrompt); // Reafficher la box en cas d'erreur
   } finally {
+    hideLoader();
     generateBtn.innerText = previousText;
     generateBtn.disabled = false;
   }
@@ -197,6 +314,7 @@ validationYesBtn?.addEventListener("click", async () => {
 validationNoBtn?.addEventListener("click", () => {
   hideReformulationBox();
   pendingReformulatedPrompt = null; // Reinitialiser
+  pendingHistoryId = null;
   
   // Retour a la barre de prompt pour modifier
   if (promptInput) {
@@ -224,7 +342,9 @@ generateBtn?.addEventListener("click", async () => {
 
   try {
     // Etape 1 : Reformuler le prompt
-    const reformulatedPrompt = await reformulatePrompt(prompt, userId);
+    const reformulation = await reformulatePrompt(prompt, userId);
+    const reformulatedPrompt = reformulation?.message || "";
+    pendingHistoryId = reformulation?.historyId || null;
     pendingReformulatedPrompt = reformulatedPrompt;
     
     // Etape 2 : Afficher la boite de validation
