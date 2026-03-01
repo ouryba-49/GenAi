@@ -29,13 +29,13 @@ const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 const SUBSCRIPTION_PLANS = {
   basic_monthly: {
-    price: 9.90,
+    price: 990,
     currency: "EUR",
     interval: "month",
     name: "Showroom AI Basic",
   },
   pro_monthly: {
-    price: 19.90,
+    price: 1990,
     currency: "EUR",
     interval: "month",
     name: "Showroom AI Pro",
@@ -685,8 +685,9 @@ app.post("/subscriptions/checkout", async (req, res) => {
       sessionId: session.id,
     });
   } catch (err) {
+    const stripeError = err?.raw?.message || err?.message || "Impossible de creer la session Stripe.";
     console.error("STRIPE CHECKOUT ERROR:", err);
-    return res.status(500).json({ success: false, message: "Impossible de créer la session Stripe." });
+    return res.status(500).json({ success: false, message: stripeError });
   }
 });
 
@@ -785,6 +786,37 @@ app.post("/subscriptions/cancel", async (req, res) => {
     try {
       canceledSubscription = await stripe.subscriptions.cancel(providerId);
     } catch (stripeErr) {
+      const isMissingSubscription =
+        stripeErr?.code === "resource_missing" ||
+        stripeErr?.raw?.code === "resource_missing" ||
+        String(stripeErr?.raw?.message || stripeErr?.message || "").toLowerCase().includes("no such subscription");
+
+      // Cas fréquent: ID enregistré mais abonnement déjà supprimé sur Stripe
+      // ou clé API Stripe pointant vers un autre compte.
+      if (isMissingSubscription) {
+        const canceledAt = new Date().toISOString();
+        await updateUserSubscription(normalizedUserId, {
+          subscription_status: "canceled",
+          subscription_canceled_at: canceledAt,
+          subscription_renews_at: null,
+          subscription_provider: "stripe",
+          subscription_provider_id: null,
+        });
+
+        return res.json({
+          success: true,
+          message: "Abonnement introuvable sur Stripe. Etat local passe en resilie.",
+          subscription: {
+            status: "canceled",
+            plan: user.subscription_plan || null,
+            renews_at: null,
+            canceled_at: canceledAt,
+            provider: "stripe",
+            provider_id: null,
+          },
+        });
+      }
+
       const stripeError = stripeErr?.raw?.message || stripeErr?.message || "Erreur Stripe.";
       console.error("STRIPE CANCEL ERROR:", stripeErr);
       return res.status(502).json({ success: false, message: stripeError });
@@ -996,4 +1028,5 @@ const server = app.listen(PORT, () => {
 // Augmenter les timeouts pour les requêtes longues (génération d'images)
 server.setTimeout(120000); // 120 secondes pour les connexions socket
 server.keepAliveTimeout = 65000;
+
 
