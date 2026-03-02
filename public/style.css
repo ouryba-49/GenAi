@@ -169,8 +169,7 @@ body {
 
 .generated-image-frame {
     width: 100%;
-    min-height: 320px;
-    max-height: calc(100vh - 300px);
+    height: clamp(280px, 62vh, 760px);
     border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, 0.16);
     background: radial-gradient(circle at 10% 10%, rgba(0, 184, 148, 0.16), transparent 60%),
@@ -179,13 +178,15 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow: auto;
 }
 
 .generated-image {
+    display: block;
     max-width: 100%;
-    max-height: calc(100vh - 330px);
+    max-height: 100%;
     width: auto;
+    height: auto;
     object-fit: contain;
     border-radius: 10px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
@@ -393,12 +394,11 @@ body {
     }
 
     .generated-image-frame {
-        min-height: 260px;
-        max-height: calc(100vh - 350px);
+        height: clamp(220px, 52vh, 560px);
     }
 
     .generated-image {
-        max-height: calc(100vh - 390px);
+        max-height: 100%;
     }
 
     .generated-actions {

@@ -7,6 +7,7 @@ require("dotenv").config();
 
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 const sqlite3 = require("sqlite3").verbose();
 const bcrypt = require("bcrypt");
 const helmet = require("helmet");
@@ -18,14 +19,19 @@ const nodemailer = require("nodemailer");
 const sgMail = require('@sendgrid/mail');
 const Stripe = require("stripe");
 const FormData = require("form-data");
+const multer = require("multer");
 
 // ---------- Config de base ----------
 const app = express();
 const PORT = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const STABILITY_API_KEY = process.env.STABILITY_API_KEY;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || null;
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
+const upload = multer({
+  dest: path.join(__dirname, "uploads"),
+});
 
 const SUBSCRIPTION_PLANS = {
   basic_monthly: {
@@ -71,13 +77,52 @@ const SENDGRID_FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'ibrahbalde41926@
 if (SENDGRID_API_KEY) sgMail.setApiKey(SENDGRID_API_KEY);
 
 function sendEmail({ to, subject, html }) {
-  if (!SENDGRID_API_KEY) {
-    console.error('SendGrid API key manquante');
-    return Promise.reject('SendGrid API key manquante');
+  const canUseSendGrid = Boolean(SENDGRID_API_KEY);
+  const canUseSmtpFallback = Boolean(EMAIL_USER && EMAIL_PASSWORD);
+
+  if (!canUseSendGrid && !canUseSmtpFallback) {
+    const err = "Aucune configuration email valide (SendGrid ou SMTP).";
+    console.error(err);
+    return Promise.reject(new Error(err));
   }
-  return sgMail.send({
+
+  if (canUseSendGrid) {
+    return sgMail
+      .send({
+        to,
+        from: SENDGRID_FROM_EMAIL,
+        subject,
+        html,
+      })
+      .then((result) => {
+        const response = Array.isArray(result) ? result[0] : result;
+        const statusCode = response?.statusCode || null;
+        const messageId = response?.headers?.["x-message-id"] || null;
+        console.log("SENDGRID OK:", { to, statusCode, messageId });
+        return result;
+      })
+      .catch((err) => {
+        const status = err?.code || err?.response?.statusCode;
+        const body = err?.response?.body;
+        console.error("SENDGRID ERROR:", { status, body, message: err?.message });
+
+        // Fallback SMTP si SendGrid echoue (ex: sender non verifie, cle invalide)
+        if (canUseSmtpFallback) {
+          console.warn("Fallback SMTP active via Nodemailer.");
+          return transporter.sendMail({
+            from: EMAIL_USER,
+            to,
+            subject,
+            html,
+          });
+        }
+        throw err;
+      });
+  }
+
+  return transporter.sendMail({
+    from: EMAIL_USER,
     to,
-    from: SENDGRID_FROM_EMAIL,
     subject,
     html,
   });
@@ -411,6 +456,32 @@ app.post("/register", async (req, res) => {
   }
 });
 
+// Test d'envoi email (diagnostic SendGrid/SMTP)
+app.post("/email/test", async (req, res) => {
+  try {
+    const { to } = req.body || {};
+    if (!to || !isValidEmail(to)) {
+      return res.status(400).json({ success: false, message: "Adresse email de destination invalide." });
+    }
+
+    await sendEmail({
+      to,
+      subject: "Test email Showroom AI",
+      html: `<p>Test d'envoi email depuis Showroom AI.</p><p>Si vous recevez ce message, la configuration email fonctionne.</p>`,
+    });
+
+    return res.json({ success: true, message: "Email de test envoye." });
+  } catch (err) {
+    const detail = err?.response?.body || err?.message || err;
+    console.error("EMAIL TEST ERROR:", detail);
+    return res.status(502).json({
+      success: false,
+      message: "Echec d'envoi de l'email de test.",
+      detail,
+    });
+  }
+});
+
 // Connexion
 app.post("/login", loginLimiter, (req, res) => {
   try {
@@ -460,7 +531,7 @@ app.post("/login", loginLimiter, (req, res) => {
 });
 
 // ---------- Route GPT (validation / reformulation) ----------
-app.post("/gpt-generate", gptLimiter, async (req, res) => {
+app.post(["/reformulate", "/gpt-generate"], gptLimiter, async (req, res) => {
   try {
     const { prompt, userId: bodyUserId } = req.body || {};
     const userId = bodyUserId || req.query.userId || req.headers["x-user-id"];
@@ -491,10 +562,10 @@ app.post("/gpt-generate", gptLimiter, async (req, res) => {
         // Choisis un modèle récent dispo pour ton compte
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Tu es un assistant showroom qui redemmande à l'utilisateur et valide la description utilisateur." },
+          { role: "system", content: "Tu es un assistant de reformulation stricte. Reformule uniquement la demande de l'utilisateur de facon claire et fidele, sans ajouter d'informations, sans suggestions, sans enrichissement, sans elements visuels supplementaires, et sans questions ouvertes. Utilise seulement le contenu fourni. Termine toujours par : Est-ce bien cela ?" },
           { role: "user", content: String(prompt) }
         ],
-        temperature: 0.7,
+        temperature: 0,
         max_tokens: 250
       },
       {
@@ -528,96 +599,128 @@ app.post("/gpt-generate", gptLimiter, async (req, res) => {
   }
 });
 
-// ---------- Route OpenAI Image (génération à partir d'un prompt) ----------
-app.post("/image-edit", async (req, res) => {
+// ---------- Route Stability Image (generation/modification via Stability) ----------
+app.post(["/generate-image", "/image-edit"], upload.single("image"), async (req, res) => {
   try {
-    const { prompt, imageDataUrl, userId, historyId } = req.body || {};
+    const { prompt, userId, historyId, strength } = req.body || {};
 
     if (!prompt) {
       return res.status(400).json({ success: false, message: "Prompt manquant." });
     }
-    if (!OPENAI_API_KEY) {
-      return res.status(500).json({ success: false, message: "Cle OpenAI manquante cote serveur." });
+    if (!STABILITY_API_KEY) {
+      return res.status(500).json({ success: false, message: "Cle Stability manquante cote serveur." });
     }
 
-    const promptText = String(prompt);
-    let response = null;
-    const getImageFromResponse = (apiResponse) => {
-      const item = apiResponse?.data?.data?.[0] || null;
-      if (!item) return null;
-      if (item.url) return item.url;
-      if (item.b64_json) return `data:image/png;base64,${item.b64_json}`;
-      return null;
-    };
+    // Nettoyer la phrase de confirmation issue de la reformulation
+    // pour ne garder que l'intention visuelle utile a la generation.
+    const cleanedPrompt = String(prompt)
+      .replace(/\s*Est-ce bien cela\s*\?\s*$/i, "")
+      .trim();
 
-    if (imageDataUrl) {
-      const imageBuffer = decodeBase64Image(imageDataUrl);
-      if (!imageBuffer) {
-        return res.status(400).json({ success: false, message: "Image importée invalide." });
-      }
-
-      const form = new FormData();
-      form.append("model", "gpt-image-1");
-      form.append("prompt", promptText);
-      form.append("size", "1024x1024");
-      form.append("image", imageBuffer, {
-        filename: "reference.png",
-        contentType: "image/png",
-      });
-
+    let stabilityPrompt = cleanedPrompt || String(prompt);
+    if (OPENAI_API_KEY) {
       try {
-        response = await axios.post("https://api.openai.com/v1/images/edits", form, {
-          headers: {
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-            ...form.getHeaders(),
+        const translateResp = await axios.post(
+          "https://api.openai.com/v1/chat/completions",
+          {
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Translate the user prompt to natural, production-ready English for image generation. " +
+                  "Keep meaning faithful, do not add ideas, return only the translated prompt.",
+              },
+              { role: "user", content: stabilityPrompt },
+            ],
+            temperature: 0,
+            max_tokens: 300,
           },
-          timeout: 120000,
-        });
-      } catch (editErr) {
-        console.warn("IMAGE EDIT FALLBACK TO GENERATION:", editErr?.response?.data || editErr.message);
+          {
+            headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+            timeout: 15000,
+          }
+        );
+        const translated = translateResp?.data?.choices?.[0]?.message?.content?.trim();
+        if (translated) stabilityPrompt = translated;
+      } catch (translateErr) {
+        console.error(
+          "PROMPT TRANSLATION ERROR:",
+          translateErr?.response?.data || translateErr?.message || translateErr
+        );
       }
     }
 
-    if (!response) {
-      response = await axios.post("https://api.openai.com/v1/images/generations", {
-        model: "dall-e-3",
-        prompt: promptText,
-        size: "1024x1024",
-        quality: "standard",
-        n: 1,
-      }, {
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 120000,
+    const form = new FormData();
+    form.append("prompt", stabilityPrompt);
+    form.append("output_format", "png");
+    if (req.file?.path) {
+      console.log("STABILITY MODE:", "image-to-image", {
+        filename: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
       });
+      form.append("mode", "image-to-image");
+      // Valeur par defaut plus expressive pour que le prompt influence vraiment le rendu.
+      const normalizedStrength = Math.min(1, Math.max(0, Number.parseFloat(strength ?? 0.65) || 0.65));
+      form.append("strength", String(normalizedStrength));
+      form.append("image", fs.createReadStream(req.file.path), {
+        filename: req.file.originalname || "source.png",
+        contentType: req.file.mimetype || "image/png",
+      });
+    } else {
+      console.log("STABILITY MODE:", "text-to-image");
+      form.append("mode", "text-to-image");
+      form.append("aspect_ratio", "9:16");
     }
 
-    const imageUrl = getImageFromResponse(response);
-    if (!imageUrl) {
-      return res.status(502).json({ success: false, message: "Reponse image vide." });
-    }
+    const response = await axios.post(
+      "https://api.stability.ai/v2beta/stable-image/generate/sd3",
+      form,
+      {
+        headers: {
+          Authorization: `Bearer ${STABILITY_API_KEY}`,
+          Accept: "image/*",
+          ...form.getHeaders(),
+        },
+        responseType: "arraybuffer",
+        timeout: 120000,
+      }
+    );
+    console.log("STABILITY PROMPT USED:", stabilityPrompt);
+
+    const imageBase64 = Buffer.from(response.data, "binary").toString("base64");
+    const imageDataUrl = `data:image/png;base64,${imageBase64}`;
 
     const parsedHistoryId = Number.parseInt(historyId, 10);
     const parsedUserId = Number.parseInt(userId, 10);
     if (Number.isFinite(parsedHistoryId)) {
       db.run(
         `UPDATE prompt_history SET image_url = ? WHERE id = ? AND (? IS NULL OR user_id = ?)`,
-        [imageUrl, parsedHistoryId, Number.isFinite(parsedUserId) ? parsedUserId : null, Number.isFinite(parsedUserId) ? parsedUserId : null],
+        [imageDataUrl, parsedHistoryId, Number.isFinite(parsedUserId) ? parsedUserId : null, Number.isFinite(parsedUserId) ? parsedUserId : null],
         (err) => {
           if (err) console.error("PROMPT HISTORY IMAGE UPDATE ERROR:", err);
         }
       );
     }
 
-    return res.json({ success: true, imageUrl });
+    return res.json({ success: true, image: imageDataUrl, imageUrl: imageDataUrl });
   } catch (err) {
-    console.error("IMAGE ROUTE ERROR:", err?.response?.data || err.message || err);
+    const detail = err?.response?.data
+      ? Buffer.from(err.response.data).toString("utf8")
+      : err?.message || err;
+    console.error("STABILITY IMAGE ERROR:", detail);
     return res.status(502).json({
       success: false,
       message: "Erreur lors de la generation de l'image.",
+      detail,
     });
+  } finally {
+    if (req.file?.path) {
+      fs.unlink(req.file.path, (unlinkErr) => {
+        if (unlinkErr) console.error("UPLOAD TEMP CLEANUP ERROR:", unlinkErr);
+      });
+    }
   }
 });
 // ---------- Routes Abonnement (Stripe) ----------
@@ -927,10 +1030,10 @@ app.put("/user/profile", (req, res) => {
     }
 
     // Validation basique
-    if (phone && String(phone).length > 20) {
+    if (phone && String(phone).length > 15) {
       return res.status(400).json({ success: false, message: "Numéro de téléphone trop long." });
     }
-    if (address && String(address).length > 500) {
+    if (address && String(address).length > 60) {
       return res.status(400).json({ success: false, message: "Adresse trop longue." });
     }
 
@@ -1028,5 +1131,6 @@ const server = app.listen(PORT, () => {
 // Augmenter les timeouts pour les requêtes longues (génération d'images)
 server.setTimeout(120000); // 120 secondes pour les connexions socket
 server.keepAliveTimeout = 65000;
+
 
 

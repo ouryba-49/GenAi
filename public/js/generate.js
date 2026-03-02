@@ -28,6 +28,7 @@ const uploadPreviewImg = document.getElementById("upload-preview-img");
 const uploadRemoveBtn = document.getElementById("upload-remove-btn");
 
 let selectedImageDataUrl = null;
+let selectedImageFile = null;
 let selectedImageSize = 0;
 let pendingReformulatedPrompt = null; // Stocker la version reformulee
 let pendingHistoryId = null;
@@ -71,6 +72,7 @@ const resetState = () => {
     downloadGeneratedBtn.setAttribute("download", "showroom-ai-resultat.png");
   }
   pendingHistoryId = null;
+  selectedImageFile = null;
   hideLoader();
   if (video) {
     video.pause();
@@ -90,6 +92,7 @@ const handleFile = (file) => {
     return;
   }
   selectedImageSize = file.size || 0;
+  selectedImageFile = file;
   const reader = new FileReader();
   reader.onload = (e) => {
     selectedImageDataUrl = e.target.result;
@@ -106,7 +109,7 @@ const handleFile = (file) => {
 // ========== ETAPE 1 : Reformuler le prompt via GPT ==========
 async function reformulatePrompt(prompt, userId) {
   try {
-    const res = await fetch("/gpt-generate", {
+    const res = await fetch("/reformulate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt, userId }),
@@ -132,15 +135,17 @@ async function generateImage(prompt, userId) {
     
     console.log(">>> generateImage appelé avec prompt:", prompt.substring(0, 50));
     
-    const res = await fetch("/image-edit", {
+    const res = await fetch("/generate-image", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt,
-        userId,
-        historyId: pendingHistoryId || null,
-        imageDataUrl: selectedImageDataUrl || null,
-      }),
+      body: (() => {
+        const form = new FormData();
+        form.append("prompt", prompt);
+        form.append("userId", String(userId || ""));
+        form.append("historyId", String(pendingHistoryId || ""));
+        form.append("strength", "0.65");
+        if (selectedImageFile) form.append("image", selectedImageFile);
+        return form;
+      })(),
       signal: controller.signal,
     });
     
@@ -155,7 +160,7 @@ async function generateImage(prompt, userId) {
       throw new Error((data.message || "Erreur de generation.") + detail);
     }
 
-    const finalUrl = data.imageUrl || null;
+    const finalUrl = data.image || data.imageUrl || null;
     if (!finalUrl) {
       console.error(">>> Erreur: data.imageUrl manquante dans:", data);
       throw new Error("Image generee introuvable.");
@@ -200,6 +205,7 @@ pickImageBtn?.addEventListener("click", () => imageInput?.click());
 imageInput?.addEventListener("change", (e) => handleFile(e.target.files?.[0]));
 uploadRemoveBtn?.addEventListener("click", () => {
   selectedImageDataUrl = null;
+  selectedImageFile = null;
   selectedImageSize = 0;
   if (imageInput) imageInput.value = "";
   if (uploadPreview) uploadPreview.style.display = "none";

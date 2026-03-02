@@ -1,14 +1,30 @@
 # Showroom AI
 
-Application web Node.js + Express pour generer des visuels de showroom avec l'IA, gerer les comptes utilisateurs, l'historique et l'abonnement Stripe.
+Application web Node.js + Express pour generer des visuels de showroom avec IA, gerer les comptes utilisateurs, l'historique et l'abonnement Stripe.
+
+## Architecture IA (hybride)
+
+- Reformulation texte: OpenAI
+- Generation/modification image: Stability AI
+
+Concretement:
+
+- `POST /reformulate` -> OpenAI (`gpt-4o-mini`)
+- `POST /generate-image` -> Stability SD3
+
+Des aliases existent pour compatibilite ancienne version:
+
+- `POST /gpt-generate` (alias reformulation)
+- `POST /image-edit` (alias generation image)
 
 ## Stack
 
 - Backend: Node.js, Express, SQLite
-- Frontend: HTML/CSS/JS (fichiers statiques dans `public/`)
-- IA: OpenAI (reformulation prompt + generation image)
+- Frontend: HTML/CSS/JS (`public/`)
+- IA texte: OpenAI Chat Completions
+- IA image: Stability AI SD3
 - Paiement: Stripe
-- Email: SendGrid (et support Nodemailer present)
+- Email: SendGrid (fallback SMTP Nodemailer)
 
 ## Prerequis
 
@@ -23,17 +39,25 @@ npm install
 
 ## Configuration `.env`
 
-Creer/mettre a jour le fichier `.env` a la racine:
+Creer/mettre a jour `.env` a la racine:
 
 ```env
+PORT=3001
 OPENAI_API_KEY=your_openai_key
-PORT=3000
+STABILITY_API_KEY=your_stability_key
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=optional_webhook_secret
 SENDGRID_API_KEY=your_sendgrid_key
 SENDGRID_FROM_EMAIL=you@example.com
-STRIPE_SECRET_KEY=your_stripe_secret_key
+EMAIL_USER=optional_smtp_user
+EMAIL_PASSWORD=optional_smtp_password
 ```
 
-Ne jamais commit `.env` dans Git.
+Important:
+
+- Ne jamais commit `.env`.
+- Regenerer toute clé exposée accidentellement.
+- Stability necessite des credits actifs pour generer des images.
 
 ## Lancement
 
@@ -41,51 +65,53 @@ Ne jamais commit `.env` dans Git.
 node server.js
 ```
 
-Serveur disponible sur:
+Serveur disponible sur `http://localhost:<PORT>`.
 
-`http://localhost:3000` (ou la valeur de `PORT`).
+## Flux principal
 
-## Parcours applicatif
-
-1. `GET /` affiche la page d'accueil (`public/home.html`)
-2. Inscription via `inscription.html`
-3. Connexion via `index.html`
-4. Generation d'image depuis prompt (et image de reference optionnelle)
-5. Consultation de l'historique avec apercu image
-6. Gestion d'abonnement (souscription + resiliation) depuis l'interface
+1. L'utilisateur saisit un prompt.
+2. Le frontend appelle `/reformulate` (OpenAI) pour une reformulation stricte.
+3. L'utilisateur confirme.
+4. Le frontend appelle `/generate-image` avec `FormData`:
+   - `prompt`
+   - `image` (optionnel)
+   - `strength` (par defaut `0.65` en image-to-image)
+5. Le backend envoie a Stability:
+   - mode `image-to-image` si image uploadee
+   - mode `text-to-image` sinon
+6. Le backend renvoie l'image en Data URL base64:
+   - `{ image: "data:image/png;base64,..." }`
 
 ## Endpoints principaux
 
+### Auth / profil
+
 - `POST /register` : creation de compte
 - `POST /login` : connexion
-- `POST /gpt-generate` : reformulation du prompt
-- `POST /image-edit` : generation image (avec ou sans image importee)
 - `GET /user/profile` : recuperation profil
 - `PUT /user/profile` : mise a jour profil
-- `GET /user/prompts` : historique prompts/images
+- `DELETE /user/delete` : suppression utilisateur
+
+### IA
+
+- `POST /reformulate` : reformulation stricte (OpenAI)
+- `POST /generate-image` : generation/modification image (Stability)
+- `GET /user/prompts` : historique prompts + image generee
+
+### Abonnement
+
 - `POST /subscriptions/checkout` : creation session Stripe
-- `POST /subscriptions/confirm` : confirmation abonnement Stripe
-- `POST /subscriptions/cancel` : resiliation abonnement Stripe
+- `POST /subscriptions/confirm` : confirmation abonnement
+- `POST /subscriptions/cancel` : resiliation abonnement
+- `POST /webhook/stripe` : webhook Stripe
 
-## Structure rapide
+### Email
 
-```text
-.
-├─ server.js
-├─ users.db
-├─ public/
-│  ├─ home.html
-│  ├─ index.html
-│  ├─ inscription.html
-│  ├─ profile.html
-│  ├─ edit-profile.html
-│  ├─ style.css
-│  └─ js/
-└─ uploads/
-```
+- `POST /email/test` : test envoi email (diagnostic SendGrid/SMTP)
 
-## Notes
+## Notes techniques
 
-- Le projet utilise SQLite (`users.db`) en local.
-- Si tu modifies les routes d'abonnement, verifie aussi les webhooks Stripe.
-- Certaines fonctionnalites frontend utilisent des URL absolues (`localhost:3001`) dans des scripts; aligne-les avec le `PORT` serveur si necessaire.
+- Les appels Stability sont en `multipart/form-data` (pas JSON).
+- En image-to-image, `aspect_ratio` n'est pas envoye (contrainte API Stability).
+- Les fichiers image uploades sont stockés temporairement dans `uploads/`, puis supprimes.
+- L'historique (`prompt_history`) stocke aussi `image_url` (Data URL base64).
